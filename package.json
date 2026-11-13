@@ -1,0 +1,62 @@
+{
+  "name": "joy-vendor-payroll",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "fix:production": "node scripts/verify-payroll-safety.mjs",
+    "install:ci": "bash scripts/install-ci.sh",
+    "dev": "npm run fix:production && vite --config vite.supabase.config.ts",
+    "dev:self-hosted": "npm run fix:production && JOY_DEPLOY_TARGET=cloudflare JOY_DEV_AUTH_EMAIL=praveen.red.07@gmail.com JOY_DEV_AUTH_NAME='Praveen B' WRANGLER_LOG_PATH=.wrangler/wrangler.log vite --host 0.0.0.0",
+    "dev:supabase": "npm run fix:production && vite --config vite.supabase.config.ts",
+    "build": "npm run fix:production && bash scripts/build-verified.sh",
+    "build:self-hosted": "npm run fix:production && node scripts/validate-self-hosted-config.mjs && JOY_DEPLOY_TARGET=cloudflare bash scripts/build-verified.sh",
+    "prepare:supabase": "npm run fix:production && node scripts/build-supabase-api.mjs",
+    "build:supabase": "npm run prepare:supabase && vite build --config vite.supabase.config.ts",
+    "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
+    "test": "npm run build && node --import tsx --test tests/rendered-html.test.mjs tests/payroll-workflows.test.mjs tests/excel-import.test.mjs tests/payroll-enhancements.test.mjs tests/production-excellence.test.mjs",
+    "test:self-hosted-auth": "node --import tsx --test tests/cloudflare-access.test.mjs",
+    "test:supabase": "npm run prepare:supabase && tsc --project tsconfig.supabase.json --noEmit && node --import tsx --test tests/supabase-deployment.test.mjs tests/production-excellence.test.mjs tests/employee-application.test.mjs tests/employee-onboarding.test.mjs tests/employee-onboarding-endpoint.test.mjs tests/internal-staff-and-left-employees.test.mjs tests/joined-employees-register.test.mjs",
+    "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
+    "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local --config wrangler.self-hosted.jsonc",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote --config wrangler.self-hosted.jsonc",
+    "deploy:self-hosted": "npm run build:self-hosted && wrangler deploy"
+  },
+  "dependencies": {
+    "@pdf-lib/fontkit": "1.1.1",
+    "@supabase/supabase-js": "2.112.3",
+    "drizzle-orm": "0.45.2",
+    "fflate": "0.7.4",
+    "lucide-react": "^1.53.0",
+    "next": "16.2.6",
+    "pdf-lib": "1.17.1",
+    "qrcode": "1.5.4",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.37.1",
+    "@tailwindcss/postcss": "4.2.1",
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "drizzle-kit": "0.31.10",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.2.6",
+    "postgres": "3.4.7",
+    "tailwindcss": "4.2.1",
+    "typescript": "5.9.3",
+    "vinext": "0.0.50",
+    "vite": "8.0.13",
+    "wrangler": "4.92.0"
+  },
+  "type": "module",
+  "displayName": "Joy Vendor Payroll Manager",
+  "optionalDependencies": {
+    "@esbuild/darwin-arm64": "^0.28.2",
+    "@rolldown/binding-darwin-arm64": "^1.3.0"
+  }
+}

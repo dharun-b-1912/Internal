@@ -1,0 +1,816 @@
+import { sql } from "drizzle-orm";
+import {
+  index,
+  integer,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
+
+export const appUsers = sqliteTable("app_users", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  fullName: text("full_name"),
+  employeeCode: text("employee_code"),
+  department: text("department"),
+  dateOfJoining: text("date_of_joining"),
+  mobileNumber: text("mobile_number"),
+  role: text("role").notNull().default("hr_team"),
+  status: text("status").notNull().default("active"),
+  permissionsJson: text("permissions_json").notNull(),
+  clientScopeJson: text("client_scope_json").notNull().default("[]"),
+  unitScopeJson: text("unit_scope_json").notNull().default("[]"),
+  hostelScopeJson: text("hostel_scope_json").notNull().default("[]"),
+  canApprovePayroll: integer("can_approve_payroll").notNull().default(0),
+  approvalManagerEmail: text("approval_manager_email"),
+  approvalSequence: integer("approval_sequence").notNull().default(0),
+  createdBy: text("created_by"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+  lastLoginAt: text("last_login_at"),
+});
+
+export const vendors = sqliteTable("vendors", {
+  id: text("id").primaryKey(),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  legalName: text("legal_name").notNull(),
+  epfCode: text("epf_code"),
+  esiCode: text("esi_code"),
+  gstin: text("gstin"),
+  remarks: text("remarks"),
+  logoDataUrl: text("logo_data_url"),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const accommodationTypes = sqliteTable(
+  "accommodation_types",
+  {
+    id: text("id").primaryKey(),
+    vendorId: text("vendor_id")
+      .notNull()
+      .references(() => vendors.id),
+    name: text("name").notNull(),
+    remarks: text("remarks"),
+    status: text("status").notNull().default("active"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("accommodation_type_client_name_unique").on(
+      table.vendorId,
+      table.name,
+    ),
+  ],
+);
+
+export const hostels = sqliteTable(
+  "hostels",
+  {
+    id: text("id").primaryKey(),
+    vendorId: text("vendor_id")
+      .notNull()
+      .references(() => vendors.id),
+    accommodationTypeId: text("accommodation_type_id").references(
+      () => accommodationTypes.id,
+    ),
+    name: text("name").notNull(),
+    address: text("address"),
+    inchargeName: text("incharge_name"),
+    ebMeterNumber: text("eb_meter_number"),
+    clientScopeJson: text("client_scope_json").notNull().default("[]"),
+    status: text("status").notNull().default("active"),
+    remarks: text("remarks"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("hostel_client_name_unique").on(table.vendorId, table.name),
+  ],
+);
+
+export const accommodationRooms = sqliteTable(
+  "accommodation_rooms",
+  {
+    id: text("id").primaryKey(),
+    vendorId: text("vendor_id")
+      .notNull()
+      .references(() => vendors.id),
+    accommodationTypeId: text("accommodation_type_id")
+      .notNull()
+      .references(() => accommodationTypes.id),
+    hostelId: text("hostel_id").references(() => hostels.id),
+    rentSettingsJson: text("rent_settings_json").notNull().default("{}"),
+    rentCutoffDay: integer("rent_cutoff_day").notNull().default(25),
+    lateJoinRentPercent: real("late_join_rent_percent").notNull().default(50),
+    roomNumber: text("room_number").notNull(),
+    capacity: integer("capacity").notNull().default(0),
+    address: text("address"),
+    remarks: text("remarks"),
+    status: text("status").notNull().default("active"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("accommodation_room_client_type_number_unique").on(
+      table.vendorId,
+      table.accommodationTypeId,
+      table.roomNumber,
+    ),
+  ],
+);
+
+export const hostelUtilityReadings = sqliteTable(
+  "hostel_utility_readings",
+  {
+    id: text("id").primaryKey(),
+    hostelId: text("hostel_id")
+      .notNull()
+      .references(() => hostels.id),
+    readingDate: text("reading_date").notNull(),
+    utilityType: text("utility_type").notNull(),
+    readingValue: real("reading_value").notNull().default(0),
+    consumption: real("consumption").notNull().default(0),
+    tankerQuantity: real("tanker_quantity").notNull().default(0),
+    amount: real("amount").notNull().default(0),
+    activityName: text("activity_name"),
+    remarks: text("remarks"),
+    enteredBy: text("entered_by"),
+    approvedBy: text("approved_by"),
+    approvedAt: text("approved_at"),
+    status: text("status").notNull().default("draft"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("hostel_utility_date_unique").on(
+      table.hostelId,
+      table.utilityType,
+      table.readingDate,
+    ),
+  ],
+);
+
+export const clientUnits = sqliteTable("client_units", {
+  id: text("id").primaryKey(),
+  vendorId: text("vendor_id")
+    .notNull()
+    .references(() => vendors.id),
+  clientName: text("client_name").notNull(),
+  unitName: text("unit_name").notNull(),
+  location: text("location").notNull(),
+  employeeCount: integer("employee_count").notNull().default(0),
+  remarks: text("remarks"),
+  attendanceCycleStartDay: integer("attendance_cycle_start_day")
+    .notNull()
+    .default(1),
+  attendanceCycleEndDay: integer("attendance_cycle_end_day")
+    .notNull()
+    .default(31),
+  attendanceWorkingDays: integer("attendance_working_days")
+    .notNull()
+    .default(26),
+  overtimeMultiplier: real("overtime_multiplier").notNull().default(1),
+  voucherHeader: text("voucher_header"),
+  payslipTitle: text("payslip_title"),
+  payslipSubtitle: text("payslip_subtitle"),
+  payslipAddress: text("payslip_address"),
+  payslipContact: text("payslip_contact"),
+  payslipFooter: text("payslip_footer"),
+  payslipEarningsJson: text("payslip_earnings_json").notNull().default("[]"),
+  payslipDeductionsJson: text("payslip_deductions_json")
+    .notNull()
+    .default("[]"),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const revenueMonthPlans = sqliteTable("revenue_month_plans", {
+  id: text("id").primaryKey(),
+  month: text("month").notNull(),
+  clientUnitId: text("client_unit_id").notNull().references(() => clientUnits.id),
+  configJson: text("config_json").notNull(),
+  revision: integer("revision").notNull().default(1),
+  confirmedAt: text("confirmed_at"),
+  updatedAt: text("updated_at").notNull(),
+  updatedBy: text("updated_by").notNull(),
+}, table => [uniqueIndex("revenue_month_unit_unique").on(table.month, table.clientUnitId)]);
+
+export const applicationDocuments = sqliteTable("application_documents", {
+  id: text("id").primaryKey(),
+  employeeId: text("employee_id").notNull().references(() => employees.id),
+  category: text("category").notNull(),
+  filename: text("filename").notNull(),
+  dataUrl: text("data_url").notNull(),
+  status: text("status").notNull().default("pending_approval"),
+  rejectionReason: text("rejection_reason"),
+  reviewedBy: text("reviewed_by"),
+  reviewedAt: text("reviewed_at"),
+  uploadedBy: text("uploaded_by"),
+  uploadedAt: text("uploaded_at"),
+}, table => [uniqueIndex("application_documents_employee_category").on(table.employeeId, table.category)]);
+
+export const employees = sqliteTable("employees", {
+  id: text("id").primaryKey(),
+  vendorId: text("vendor_id")
+    .notNull()
+    .references(() => vendors.id),
+  clientUnitId: text("client_unit_id")
+    .notNull()
+    .references(() => clientUnits.id),
+  employeeCode: text("employee_code").notNull().unique(),
+  name: text("name").notNull(),
+  department: text("department").notNull(),
+  dateOfJoining: text("date_of_joining").notNull(),
+  dateOfBirth: text("date_of_birth"),
+  dateOfLeaving: text("date_of_leaving"),
+  finalPayrollMonth: text("final_payroll_month"),
+  uanMasked: text("uan_masked"),
+  esiMasked: text("esi_masked"),
+  bankAccountMasked: text("bank_account_masked"),
+  ifscMasked: text("ifsc_masked"),
+  bankName: text("bank_name"),
+  bankBranch: text("bank_branch"),
+  accommodationType: text("accommodation_type").notNull().default("Tamil"),
+  roomId: text("room_id").references(() => accommodationRooms.id),
+  roomNumber: text("room_number"),
+  roomRentAmount: real("room_rent_amount").notNull().default(0),
+  photoDataUrl: text("photo_data_url"),
+  mobileNumber: text("mobile_number"),
+  emailAddress: text("email_address"),
+  emergencyContactNumber: text("emergency_contact_number"),
+  addressLine: text("address_line"),
+  district: text("district"),
+  stateName: text("state_name"),
+  pincode: text("pincode"),
+  bloodGroup: text("blood_group"),
+  gender: text("gender"),
+  fatherName: text("father_name"),
+  spouseName: text("spouse_name"),
+  maritalStatus: text("marital_status"),
+  highestQualification: text("highest_qualification"),
+  applicationJson: text("application_json"),
+  pfApplicable: integer("pf_applicable").notNull().default(1),
+  pfWageAmount: real("pf_wage_amount").notNull().default(0),
+  esiApplicable: integer("esi_applicable").notNull().default(1),
+  esiWageAmount: real("esi_wage_amount").notNull().default(0),
+  ptApplicable: integer("pt_applicable").notNull().default(1),
+  lwfApplicable: integer("lwf_applicable").notNull().default(1),
+  paymentMode: text("payment_mode").notNull().default("bank"),
+  salaryAmount: real("salary_amount").notNull().default(0),
+  salaryBasis: text("salary_basis").notNull().default("monthly"),
+  defaultShift: text("default_shift").notNull().default("General"),
+  shiftPattern: text("shift_pattern").notNull().default("general"),
+  applicableShiftsJson: text("applicable_shifts_json").notNull().default("[]"),
+  remarks: text("remarks"),
+  complianceStatus: text("compliance_status").notNull().default("ready"),
+  status: text("status").notNull().default("active"),
+  employmentType: text("employment_type").notNull().default("client"),
+  processingStage: text("processing_stage").notNull().default("field_hr_draft"),
+  finalizedBy: text("finalized_by"),
+  finalizedAt: text("finalized_at"),
+});
+
+export const vehicles = sqliteTable("vehicles", {
+  id: text("id").primaryKey(),
+  vendorId: text("vendor_id")
+    .notNull()
+    .references(() => vendors.id),
+  registrationNumber: text("registration_number").notNull().unique(),
+  vehicleName: text("vehicle_name").notNull(),
+  vehicleType: text("vehicle_type").notNull().default("car"),
+  currentOdometer: real("current_odometer").notNull().default(0),
+  permitExpiry: text("permit_expiry"),
+  insuranceExpiry: text("insurance_expiry"),
+  fcExpiry: text("fc_expiry"),
+  pollutionExpiry: text("pollution_expiry"),
+  nextServiceDate: text("next_service_date"),
+  nextServiceKm: real("next_service_km"),
+  tyreChangedDate: text("tyre_changed_date"),
+  tyreChangedKm: real("tyre_changed_km"),
+  lastWaterWashDate: text("last_water_wash_date"),
+  lastWheelAlignmentDate: text("last_wheel_alignment_date"),
+  status: text("status").notNull().default("active"),
+  remarks: text("remarks"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const vehicleRecords = sqliteTable("vehicle_records", {
+  id: text("id").primaryKey(),
+  vehicleId: text("vehicle_id")
+    .notNull()
+    .references(() => vehicles.id),
+  recordDate: text("record_date").notNull(),
+  recordType: text("record_type").notNull(),
+  tripFrom: text("trip_from"),
+  tripTo: text("trip_to"),
+  purpose: text("purpose"),
+  startKm: real("start_km"),
+  endKm: real("end_km"),
+  litres: real("litres").notNull().default(0),
+  amount: real("amount").notNull().default(0),
+  vendorName: text("vendor_name"),
+  nextDueDate: text("next_due_date"),
+  nextDueKm: real("next_due_km"),
+  remarks: text("remarks"),
+  enteredBy: text("entered_by"),
+  approvedBy: text("approved_by"),
+  approvedAt: text("approved_at"),
+  status: text("status").notNull().default("draft"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const utilityMeters = sqliteTable("utility_meters", {
+  id: text("id").primaryKey(),
+  vendorId: text("vendor_id")
+    .notNull()
+    .references(() => vendors.id),
+  locationType: text("location_type").notNull(),
+  locationName: text("location_name").notNull(),
+  meterNumber: text("meter_number"),
+  status: text("status").notNull().default("active"),
+  remarks: text("remarks"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const ebReadings = sqliteTable(
+  "eb_readings",
+  {
+    id: text("id").primaryKey(),
+    meterId: text("meter_id")
+      .notNull()
+      .references(() => utilityMeters.id),
+    readingDate: text("reading_date").notNull(),
+    readingValue: real("reading_value").notNull(),
+    unitsConsumed: real("units_consumed").notNull().default(0),
+    amount: real("amount").notNull().default(0),
+    remarks: text("remarks"),
+    enteredBy: text("entered_by"),
+    approvedBy: text("approved_by"),
+    approvedAt: text("approved_at"),
+    status: text("status").notNull().default("draft"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("eb_meter_reading_date_unique").on(
+      table.meterId,
+      table.readingDate,
+    ),
+  ],
+);
+
+export const shiftDefinitions = sqliteTable(
+  "shift_definitions",
+  {
+    id: text("id").primaryKey(),
+    vendorId: text("vendor_id")
+      .notNull()
+      .references(() => vendors.id),
+    clientUnitId: text("client_unit_id").references(() => clientUnits.id),
+    name: text("name").notNull(),
+    startTime: text("start_time").notNull(),
+    endTime: text("end_time").notNull(),
+    breakMinutes: integer("break_minutes").notNull().default(0),
+    requiredWorkMinutes: integer("required_work_minutes")
+      .notNull()
+      .default(480),
+    lateGraceMinutes: integer("late_grace_minutes").notNull().default(0),
+    lateDeductionMinutes: integer("late_deduction_minutes")
+      .notNull()
+      .default(0),
+    earlyGraceMinutes: integer("early_grace_minutes").notNull().default(0),
+    earlyDeductionMinutes: integer("early_deduction_minutes")
+      .notNull()
+      .default(0),
+    otMode: text("ot_mode").notNull().default("approval"),
+    fixedOtHours: real("fixed_ot_hours").notNull().default(0),
+    remarks: text("remarks"),
+    status: text("status").notNull().default("active"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("shift_client_name_unique").on(table.vendorId, table.name),
+  ],
+);
+
+export const payrollRemarks = sqliteTable("payroll_remarks", {
+  id: text("id").primaryKey(),
+  vendorId: text("vendor_id")
+    .notNull()
+    .references(() => vendors.id),
+  title: text("title").notNull(),
+  category: text("category").notNull().default("general"),
+  notes: text("notes"),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const payrollRules = sqliteTable("payroll_rules", {
+  id: text("id").primaryKey(),
+  vendorId: text("vendor_id")
+    .notNull()
+    .unique()
+    .references(() => vendors.id),
+  standardWorkingDays: integer("standard_working_days").notNull().default(26),
+  pfRate: real("pf_rate").notNull().default(0),
+  esiRate: real("esi_rate").notNull().default(0),
+  professionalTax: real("professional_tax").notNull().default(0),
+  lwf: real("lwf").notNull().default(0),
+  overtimeHourlyRate: real("overtime_hourly_rate").notNull().default(0),
+  paidLeave: integer("paid_leave").notNull().default(0),
+  paidWeekOff: integer("paid_week_off").notNull().default(0),
+  effectiveFrom: text("effective_from").notNull().default("2026-01-01"),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const attendanceEntries = sqliteTable("attendance_entries", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  employeeId: text("employee_id")
+    .notNull()
+    .references(() => employees.id),
+  attendanceDate: text("attendance_date").notNull(),
+  statusCode: text("status_code").notNull(),
+  shiftCode: text("shift_code").notNull(),
+  overtimeHours: real("overtime_hours").notNull().default(0),
+  punchIn: text("punch_in"),
+  punchOut: text("punch_out"),
+  workedHours: real("worked_hours").notNull().default(0),
+  deductionHours: real("deduction_hours").notNull().default(0),
+  remarks: text("remarks"),
+  source: text("source").notNull().default("manual"),
+  updatedBy: text("updated_by"),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const payrollRuns = sqliteTable("payroll_runs", {
+  id: text("id").primaryKey(),
+  vendorId: text("vendor_id")
+    .notNull()
+    .references(() => vendors.id),
+  clientUnitId: text("client_unit_id")
+    .notNull()
+    .references(() => clientUnits.id),
+  payPeriod: text("pay_period").notNull(),
+  periodStart: text("period_start"),
+  periodEnd: text("period_end"),
+  workingDays: integer("working_days").notNull().default(26),
+  processingMode: text("processing_mode").notNull().default("attendance"),
+  status: text("status").notNull().default("draft"),
+  employeeCount: integer("employee_count").notNull().default(0),
+  grossEarnings: real("gross_earnings").notNull().default(0),
+  statutoryDeductions: real("statutory_deductions").notNull().default(0),
+  otherDeductions: real("other_deductions").notNull().default(0),
+  accommodationDeductions: real("accommodation_deductions")
+    .notNull()
+    .default(0),
+  netPayable: real("net_payable").notNull().default(0),
+  bankPayable: real("bank_payable").notNull().default(0),
+  cashPayable: real("cash_payable").notNull().default(0),
+  issueCount: integer("issue_count").notNull().default(0),
+  approvedBy: text("approved_by"),
+  approvedAt: text("approved_at"),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const accommodationRoomExpenses = sqliteTable(
+  "accommodation_room_expenses",
+  {
+    id: text("id").primaryKey(),
+    roomId: text("room_id")
+      .notNull()
+      .references(() => accommodationRooms.id),
+    payPeriod: text("pay_period").notNull(),
+    gasAmount: real("gas_amount").notNull().default(0),
+    gasDate: text("gas_date"),
+    gasCylinderCount: integer("gas_cylinder_count").notNull().default(0),
+    gasPaymentReference: text("gas_payment_reference"),
+    rationAmount: real("ration_amount").notNull().default(0),
+    rationDate: text("ration_date"),
+    rationPaymentReference: text("ration_payment_reference"),
+    provisionAmount: real("provision_amount").notNull().default(0),
+    provisionDate: text("provision_date"),
+    provisionPaymentReference: text("provision_payment_reference"),
+    roomRentAmount: real("room_rent_amount").notNull().default(0),
+    transportRentAmount: real("transport_rent_amount").notNull().default(0),
+    occupantCount: integer("occupant_count").notNull().default(0),
+    status: text("status").notNull().default("draft"),
+    notes: text("notes"),
+    finalizedBy: text("finalized_by"),
+    finalizedAt: text("finalized_at"),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index("accommodation_room_period_idx").on(
+      table.roomId,
+      table.payPeriod,
+    ),
+  ],
+);
+
+export const payrollItems = sqliteTable("payroll_items", {
+  id: text("id").primaryKey(),
+  runId: text("run_id")
+    .notNull()
+    .references(() => payrollRuns.id),
+  employeeId: text("employee_id")
+    .notNull()
+    .references(() => employees.id),
+  presentDays: real("present_days").notNull().default(0),
+  absentDays: real("absent_days").notNull().default(0),
+  leaveDays: real("leave_days").notNull().default(0),
+  weekOffDays: real("week_off_days").notNull().default(0),
+  holidayPresentDays: real("holiday_present_days").notNull().default(0),
+  payableDays: real("payable_days").notNull().default(0),
+  overtimeHours: real("overtime_hours").notNull().default(0),
+  fixedWorkingDays: real("fixed_working_days").notNull().default(0),
+  nfhDays: real("nfh_days").notNull().default(0),
+  compOffDays: real("comp_off_days").notNull().default(0),
+  onDutyDays: real("on_duty_days").notNull().default(0),
+  sundayDays: real("sunday_days").notNull().default(0),
+  plDays: real("pl_days").notNull().default(0),
+  clDays: real("cl_days").notNull().default(0),
+  slDays: real("sl_days").notNull().default(0),
+  importedGrossEarnings: real("imported_gross_earnings"),
+  importedTotalDeductions: real("imported_total_deductions"),
+  importedNetPayable: real("imported_net_payable"),
+  basic: real("basic").notNull().default(0),
+  da: real("da").notNull().default(0),
+  hra: real("hra").notNull().default(0),
+  conveyance: real("conveyance").notNull().default(0),
+  foodAllowance: real("food_allowance").notNull().default(0),
+  nightAllowance: real("night_allowance").notNull().default(0),
+  overtimeWages: real("overtime_wages").notNull().default(0),
+  attendanceBonus: real("attendance_bonus").notNull().default(0),
+  arrears: real("arrears").notNull().default(0),
+  holidayWages: real("holiday_wages").notNull().default(0),
+  sundayEarnings: real("sunday_earnings").notNull().default(0),
+  leaveWages: real("leave_wages").notNull().default(0),
+  roomAllowance: real("room_allowance").notNull().default(0),
+  productionIncentive: real("production_incentive").notNull().default(0),
+  medicalAllowance: real("medical_allowance").notNull().default(0),
+  pfDeduction: real("pf_deduction").notNull().default(0),
+  esiDeduction: real("esi_deduction").notNull().default(0),
+  professionalTax: real("professional_tax").notNull().default(0),
+  lwf: real("lwf").notNull().default(0),
+  canteen: real("canteen").notNull().default(0),
+  snacks: real("snacks").notNull().default(0),
+  tent: real("tent").notNull().default(0),
+  advance: real("advance").notNull().default(0),
+  otherDeduction: real("other_deduction").notNull().default(0),
+  tds: real("tds").notNull().default(0),
+  medicalInsurance: real("medical_insurance").notNull().default(0),
+  accommodationDeduction: real("accommodation_deduction").notNull().default(0),
+  returnAmount: real("return_amount").notNull().default(0),
+  grossEarnings: real("gross_earnings").notNull().default(0),
+  totalDeductions: real("total_deductions").notNull().default(0),
+  netPayable: real("net_payable").notNull().default(0),
+  validationStatus: text("validation_status").notNull().default("ready"),
+  validationMessage: text("validation_message"),
+});
+
+export const payrollBatches = sqliteTable(
+  "payroll_batches",
+  {
+    id: text("id").primaryKey(),
+    runId: text("run_id")
+      .notNull()
+      .references(() => payrollRuns.id),
+    accommodationType: text("accommodation_type").notNull(),
+    employeeCount: integer("employee_count").notNull().default(0),
+    grossEarnings: real("gross_earnings").notNull().default(0),
+    netPayable: real("net_payable").notNull().default(0),
+    status: text("status").notNull().default("prepared"),
+    paymentReference: text("payment_reference"),
+    preparedBy: text("prepared_by"),
+    preparedAt: text("prepared_at"),
+    clearedBy: text("cleared_by"),
+    clearedAt: text("cleared_at"),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("payroll_batch_run_accommodation_unique").on(
+      table.runId,
+      table.accommodationType,
+    ),
+  ],
+);
+
+// A payment export batch is separate from the accommodation-wise payroll
+// preparation batch.  It records the exact individual payroll items selected
+// for one bank upload so a refresh, second login, or second download cannot
+// silently process the same employee twice.
+export const paymentExportBatches = sqliteTable(
+  "payment_export_batches",
+  {
+    id: text("id").primaryKey(),
+    runId: text("run_id")
+      .notNull()
+      .references(() => payrollRuns.id),
+    status: text("status").notNull().default("locked"),
+    exportFormat: text("export_format"),
+    employeeCount: integer("employee_count").notNull().default(0),
+    totalPayable: real("total_payable").notNull().default(0),
+    lockedBy: text("locked_by").notNull(),
+    lockedAt: text("locked_at").notNull(),
+    downloadedBy: text("downloaded_by"),
+    downloadedAt: text("downloaded_at"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index("payment_export_batches_run_status_idx").on(
+      table.runId,
+      table.status,
+    ),
+  ],
+);
+
+export const paymentExportBatchItems = sqliteTable(
+  "payment_export_batch_items",
+  {
+    id: text("id").primaryKey(),
+    batchId: text("batch_id")
+      .notNull()
+      .references(() => paymentExportBatches.id, { onDelete: "cascade" }),
+    runId: text("run_id")
+      .notNull()
+      .references(() => payrollRuns.id),
+    payrollItemId: text("payroll_item_id")
+      .notNull()
+      .references(() => payrollItems.id),
+    employeeId: text("employee_id")
+      .notNull()
+      .references(() => employees.id),
+    amount: real("amount").notNull().default(0),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("payment_export_batch_run_item_unique").on(
+      table.runId,
+      table.payrollItemId,
+    ),
+    index("payment_export_batch_items_batch_idx").on(table.batchId),
+    index("payment_export_batch_items_payroll_item_idx").on(
+      table.payrollItemId,
+    ),
+    index("payment_export_batch_items_employee_fk_idx").on(table.employeeId),
+    index("payment_export_batch_items_employee_idx").on(
+      table.runId,
+      table.employeeId,
+    ),
+  ],
+);
+
+export const accommodationCharges = sqliteTable("accommodation_charges", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  runId: text("run_id")
+    .notNull()
+    .references(() => payrollRuns.id),
+  employeeId: text("employee_id")
+    .notNull()
+    .references(() => employees.id),
+  roomExpenseId: text("room_expense_id").references(
+    () => accommodationRoomExpenses.id,
+  ),
+  roomNumber: text("room_number"),
+  idCard: real("id_card").notNull().default(0),
+  rent: real("rent").notNull().default(0),
+  bus: real("bus").notNull().default(0),
+  medical: real("medical").notNull().default(0),
+  ticket: real("ticket").notNull().default(0),
+  shoe: real("shoe").notNull().default(0),
+  advance: real("advance").notNull().default(0),
+  food: real("food").notNull().default(0),
+  aadhaarUpdate: real("aadhaar_update").notNull().default(0),
+  bankAccountCharge: real("bank_account_charge").notNull().default(0),
+  tshirt: real("tshirt").notNull().default(0),
+  oldPending: real("old_pending").notNull().default(0),
+  gasShare: real("gas_share").notNull().default(0),
+  rationShare: real("ration_share").notNull().default(0),
+  provisionShare: real("provision_share").notNull().default(0),
+  returnAmount: real("return_amount").notNull().default(0),
+});
+
+export const recoveryEntries = sqliteTable("recovery_entries", {
+  id: text("id").primaryKey(),
+  runId: text("run_id")
+    .notNull()
+    .references(() => payrollRuns.id),
+  employeeId: text("employee_id")
+    .notNull()
+    .references(() => employees.id),
+  recoveryDate: text("recovery_date").notNull(),
+  recoveryType: text("recovery_type").notNull(),
+  amount: real("amount").notNull().default(0),
+  reference: text("reference"),
+  notes: text("notes"),
+  createdBy: text("created_by"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const recoveryFinalizations = sqliteTable(
+  "recovery_finalizations",
+  {
+    id: text("id").primaryKey(),
+    runId: text("run_id")
+      .notNull()
+      .references(() => payrollRuns.id),
+    employeeId: text("employee_id")
+      .notNull()
+      .references(() => employees.id),
+    voucherNumber: text("voucher_number").notNull().unique(),
+    finalizedBy: text("finalized_by"),
+    finalizedAt: text("finalized_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("recovery_finalization_run_employee_unique").on(
+      table.runId,
+      table.employeeId,
+    ),
+  ],
+);
+
+export const auditEvents = sqliteTable("audit_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  action: text("action").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  summary: text("summary").notNull(),
+  actorEmail: text("actor_email"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const staffTasks = sqliteTable("staff_tasks", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+  assignedToUserId: text("assigned_to_user_id").references(() => appUsers.id),
+  assignedToName: text("assigned_to_name").notNull(),
+  assignedToPhone: text("assigned_to_phone").notNull(),
+  priority: text("priority").notNull().default("normal"),
+  dueDate: text("due_date"),
+  status: text("status").notNull().default("pending"),
+  completedAt: text("completed_at"),
+  completionNotes: text("completion_notes"),
+  acceptedAt: text("accepted_at"),
+  lastReminderAt: text("last_reminder_at"),
+  reminderCount: integer("reminder_count").default(0),
+  autoRemind: integer("auto_remind").default(1),
+  whatsappMessageId: text("whatsapp_message_id"),
+  whatsappStatus: text("whatsapp_status").default("pending"),
+  createdBy: text("created_by").notNull(),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});

@@ -1,0 +1,166 @@
+export const ATTENDANCE_CODES = ["P", "HD", "A", "L", "WO", "H", "HP", "CO"] as const;
+
+export type AttendanceCode = (typeof ATTENDANCE_CODES)[number];
+
+export type AttendanceInput = {
+  statusCode: string;
+  overtimeHours: number;
+};
+
+export type PayrollRuleInput = {
+  standardWorkingDays: number;
+  pfRate: number;
+  esiRate: number;
+  professionalTax: number;
+  lwf: number;
+  overtimeHourlyRate: number;
+  paidLeave: number;
+  paidWeekOff: number;
+};
+
+export const defaultPayrollRules: PayrollRuleInput = {
+  standardWorkingDays: 26,
+  pfRate: 0,
+  esiRate: 0,
+  professionalTax: 0,
+  lwf: 0,
+  overtimeHourlyRate: 0,
+  paidLeave: 0,
+  paidWeekOff: 0,
+};
+
+export const earningFields = [
+  "basic", "da", "hra", "conveyance", "foodAllowance", "nightAllowance",
+  "overtimeWages", "attendanceBonus", "arrears", "holidayWages",
+  "sundayEarnings", "leaveWages", "roomAllowance",
+  "productionIncentive", "medicalAllowance",
+] as const;
+
+export const deductionFields = [
+  "pfDeduction", "esiDeduction", "professionalTax", "lwf", "canteen",
+  "snacks", "tent", "advance", "otherDeduction", "tds", "medicalInsurance",
+] as const;
+
+export type MonetaryField = (typeof earningFields)[number] | (typeof deductionFields)[number];
+
+export function roundMoney(value: number) {
+  return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
+}
+
+export function numberValue(value: unknown) {
+  if (typeof value === "string") value = value.replace(/[₹,\s]/g, "");
+  const number = Number(value);
+  return Number.isFinite(number) ? roundMoney(number) : 0;
+}
+
+export function attendanceSummary(entries: AttendanceInput[], rules: PayrollRuleInput) {
+  const presentDays = entries.filter((entry) => entry.statusCode === "P" || entry.statusCode === "HP" || entry.statusCode === "CO").length + entries.filter((entry) => entry.statusCode === "HD").length * 0.5;
+  const absentDays = entries.filter((entry) => entry.statusCode === "A").length + entries.filter((entry) => entry.statusCode === "HD").length * 0.5;
+  const leaveDays = entries.filter((entry) => entry.statusCode === "L").length;
+  const weekOffDays = entries.filter((entry) => entry.statusCode === "WO" || entry.statusCode === "H").length;
+  const holidayPresentDays = entries.filter((entry) => entry.statusCode === "HP").length;
+  const compOffDays = entries.filter((entry) => entry.statusCode === "CO").length;
+  const overtimeHours = roundMoney(entries.reduce((sum, entry) => sum + numberValue(entry.overtimeHours), 0));
+  const payableDays = presentDays + (rules.paidLeave ? leaveDays : 0) + (rules.paidWeekOff ? weekOffDays : 0);
+
+  return { presentDays, absentDays, leaveDays, weekOffDays, holidayPresentDays, compOffDays, payableDays, overtimeHours };
+}
+
+export function accommodationTotal(charge: Record<string, unknown> | null | undefined) {
+  if (!charge) return { accommodationDeduction: 0, returnAmount: 0 };
+  const fields = ["idCard", "rent", "bus", "medical", "ticket", "shoe", "advance", "food", "aadhaarUpdate", "bankAccountCharge", "tshirt", "oldPending", "gasShare", "rationShare", "provisionShare"];
+  return {
+    accommodationDeduction: roundMoney(fields.reduce((sum, field) => sum + numberValue(charge[field]), 0)),
+    returnAmount: numberValue(charge.returnAmount),
+  };
+}
+
+export function payrollTotals(item: Record<string, unknown>) {
+  const baseGross = numberValue(item.basic);
+  const otWages = numberValue(item.overtimeWages);
+  const additionalEarnings = roundMoney(
+    numberValue(item.da) +
+    numberValue(item.hra) +
+    numberValue(item.conveyance) +
+    numberValue(item.foodAllowance) +
+    numberValue(item.nightAllowance) +
+    numberValue(item.attendanceBonus) +
+    numberValue(item.arrears) +
+    numberValue(item.holidayWages) +
+    numberValue(item.sundayEarnings) +
+    numberValue(item.leaveWages) +
+    numberValue(item.roomAllowance) +
+    numberValue(item.productionIncentive) +
+    numberValue(item.medicalAllowance)
+  );
+  const sumEarnings = roundMoney(earningFields.reduce((sum, field) => sum + numberValue(item[field]), 0));
+  const importedGross = numberValue(item.importedGrossEarnings ?? item.sourceGrossEarnings);
+  const computedEarnings = roundMoney(baseGross + otWages + additionalEarnings) || sumEarnings;
+  // Hybrid rule: If Excel provided an explicit Gross Earnings total, respect it exactly. Otherwise use computed sum.
+  const grossEarnings = importedGross > 0 ? importedGross : (computedEarnings || importedGross);
+
+  const statutoryDeductions = roundMoney(
+    numberValue(item.pfDeduction) +
+    numberValue(item.esiDeduction) +
+    numberValue(item.professionalTax) +
+    numberValue(item.lwf) +
+    numberValue(item.tds)
+  );
+  const salaryDeductions = roundMoney(deductionFields.reduce((sum, field) => sum + numberValue(item[field]), 0));
+  const importedDeductions = numberValue(item.importedTotalDeductions ?? item.sourceTotalDeductions);
+  // Hybrid rule: If Excel provided an explicit Total Deductions, use it when itemized deductions match or haven't been edited.
+  // If HR manually edits itemized deductions, recalculate using the active salary deductions sum.
+  const hasDeductionsDiscrepancy = importedDeductions > 0 && salaryDeductions > 0 && Math.abs(salaryDeductions - importedDeductions) >= 0.01;
+  const effectiveSalaryDeductions = (importedDeductions > 0 && !hasDeductionsDiscrepancy) ? importedDeductions : salaryDeductions;
+  const accommodationDeduction = numberValue(item.accommodationDeduction);
+  const returnAmount = numberValue(item.returnAmount);
+  const totalDeductions = roundMoney(effectiveSalaryDeductions + accommodationDeduction);
+
+  const importedNet = numberValue(item.importedNetPayable ?? item.sourceNetPayable);
+  const calculatedNet = roundMoney(grossEarnings - totalDeductions + returnAmount);
+  // When software accommodation deductions exist, they reduce the final bank payout/net payable.
+  // If HR edited itemized earnings or deductions, use calculatedNet so the changes immediately reflect in the payout.
+  const hasEarningsDiscrepancy = importedGross > 0 && sumEarnings > 0 && Math.abs(sumEarnings - importedGross) >= 0.01;
+  const rawNetPayable = (importedNet > 0 && !hasDeductionsDiscrepancy && !hasEarningsDiscrepancy)
+    ? roundMoney(importedNet - accommodationDeduction + returnAmount)
+    : calculatedNet;
+  const hasMathDiscrepancy = importedGross > 0 && importedNet > 0 && importedNet !== calculatedNet;
+
+  // Clamped Net: In payroll disbursement, take-home pay cannot be negative.
+  // When deductions exceed earnings, netPayable is capped at 0.00 and unrecoveredAmount carries over.
+  const netPayable = Math.max(0, rawNetPayable);
+  const unrecoveredAmount = rawNetPayable < 0 ? roundMoney(Math.abs(rawNetPayable)) : 0;
+
+  return {
+    grossEarnings,
+    statutoryDeductions,
+    salaryDeductions: effectiveSalaryDeductions,
+    totalDeductions,
+    accommodationDeduction,
+    returnAmount,
+    netPayable,
+    unrecoveredAmount,
+    rawNetPayable,
+    hasMathDiscrepancy,
+    calculatedNet,
+  };
+}
+
+export function validationForEmployee(
+  employee: { paymentMode: string; bankAccountMasked: string | null; ifscMasked: string | null; uanMasked: string | null; esiMasked: string | null; salaryAmount: number; pfApplicable?: number; esiApplicable?: number },
+  rules?: PayrollRuleInput,
+) {
+  // Note: ESI and PF details are not mandatory (optional statutory benefits depending on company/employee preference).
+  // Employees without bank details are processed via Cash Payment disbursement.
+  return {
+    validationStatus: "ready",
+    validationMessage: (!employee.bankAccountMasked || !employee.ifscMasked
+      ? "Cash payout (bank details pending)"
+      : null),
+  };
+}
+
+export function salaryForAttendance(salaryAmount: number, salaryBasis: string, payableDays: number, rules: PayrollRuleInput) {
+  if (salaryBasis === "daily") return roundMoney(salaryAmount * payableDays);
+  return roundMoney((salaryAmount / Math.max(1, rules.standardWorkingDays)) * payableDays);
+}

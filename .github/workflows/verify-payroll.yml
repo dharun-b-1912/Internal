@@ -1,0 +1,66 @@
+name: Verify Joy Payroll
+
+on:
+  push:
+    branches:
+      - main
+      - release/production-excellence-v1
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+          cache: npm
+      - run: npm ci
+      - name: Apply production safeguards once
+        run: npm run fix:production
+      - name: Verify requested production requirements
+        run: node --test tests/production-excellence.test.mjs
+      - name: Run production-safe calculation and import regressions
+        run: node --import tsx --test tests/excel-import.test.mjs tests/payroll-enhancements.test.mjs
+      - name: Prepare Supabase production API from verified source
+        run: node scripts/build-supabase-api.mjs
+      - name: Type-check Supabase production build
+        run: npx tsc --project tsconfig.supabase.json --noEmit
+      - name: Verify Supabase deployment contract
+        run: node --test tests/supabase-deployment.test.mjs tests/production-excellence.test.mjs
+      - name: Build Cloudflare static application from verified source
+        run: npx vite build --config vite.supabase.config.ts
+      - name: Confirm Cloudflare static output
+        run: test -f dist-supabase/index.html
+      - name: Bundle payroll API for direct deployment
+        run: |
+          mkdir -p supabase/functions/payroll-api-bundle
+          npx --yes esbuild supabase/functions/payroll-api/index.ts \
+            --bundle \
+            --platform=neutral \
+            --format=esm \
+            --target=es2022 \
+            --minify \
+            --external:@supabase/supabase-js \
+            --external:drizzle-orm \
+            --external:drizzle-orm/* \
+            --external:postgres \
+            --outfile=supabase/functions/payroll-api-bundle/index.ts
+          cp supabase/functions/payroll-api/deno.json supabase/functions/payroll-api-bundle/deno.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: payroll-api-generated
+          path: supabase/functions/payroll-api
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: payroll-api-bundle
+          path: supabase/functions/payroll-api-bundle
+          if-no-files-found: error
